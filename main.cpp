@@ -1,56 +1,62 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <stack>
+#include <deque>
 
 using TVecIterator = std::vector<int>::const_iterator;
 
 struct TExpression {
-    std::vector <int> operands;
-    std::vector <char> operators;
+    std::deque <int> operands;
+    std::deque <char> operators;
 };
 
-bool GetFirstExpression(TVecIterator left_it, 
-               TVecIterator right_it, 
-               int needed,
-               char last_op,
-               TExpression &expr) {
-    if (left_it == right_it) {
-        return needed != 0 ? false : true;
-    }
-    int lhs = 0;
-    int lhs_mult = (last_op == '+' ? +1 : -1);
-    while (left_it != right_it) {
-        lhs = (lhs * 10) + (*left_it);
-        int new_needed = needed - (lhs_mult * lhs);
-        ++left_it;
-        if (GetFirstExpression(left_it, right_it, new_needed, '+', expr)) {
-            expr.operands.push_back(lhs);
-            expr.operators.push_back('+');
-            return true;
-        }
-        if (GetFirstExpression(left_it, right_it, new_needed, '-', expr)) {
-            expr.operands.push_back(lhs);
-            expr.operators.push_back('-');
-            return true;
-        }
-    };
-    return false;
+void PushPart(TExpression &expr, char op, int value) {
+    expr.operators.push_back(op);
+    expr.operands.push_back(value);
 }
 
-TExpression Solve(const std::vector<int> &nums, int needed = 200) {
-    TExpression expr;
-    if (!GetFirstExpression(nums.begin(), nums.end(), needed, '+', expr)) {
-        throw std::invalid_argument("No expression found");
+void PopPart(TExpression &expr) {
+    expr.operators.pop_back();
+    expr.operands.pop_back();
+}
+
+void GetExpressions(TVecIterator left_it, TVecIterator right_it,
+        TExpression current_expr, char prev_op, int goal,
+        std::vector<TExpression> &exprs) {
+    if (left_it == right_it) {
+        // prev_op == '+' необходимо, чтобы избежать дублирования
+        if ( goal == 0 && prev_op == '+') {
+            exprs.push_back(current_expr);
+            // Удаляем лишний "+" в начале
+            exprs.back().operators.pop_front();
+        }
+        return;
     }
-    return expr;
+    int lhs = 0;
+    int lhs_mult = (prev_op == '+') ? +1 : -1;
+    while ( left_it != right_it ) {
+        lhs = lhs * 10 + (*left_it);
+        int new_goal = goal - (lhs_mult * lhs);
+        ++left_it;
+        PushPart(current_expr, prev_op, lhs);
+        GetExpressions(left_it, right_it, current_expr, '+', new_goal, exprs);
+        GetExpressions(left_it, right_it, current_expr, '-', new_goal, exprs);
+        PopPart(current_expr);
+    }
+}
+
+std::vector<TExpression> Solve(const std::vector<int> &nums, int goal = 200) {
+    std::vector<TExpression> exprs;
+    TExpression tmp_expr;
+    GetExpressions(nums.begin(), nums.end(), tmp_expr, '+', goal, exprs);
+    return exprs;
 }
 
 std::ostream& operator << (std::ostream &os, const TExpression &expr) {
-    auto operands_it = expr.operands.rbegin();
-    auto operators_it = expr.operators.rbegin();
+    auto operands_it = expr.operands.begin();
+    auto operators_it = expr.operators.begin();
     bool first = true;
-    while ( operands_it != expr.operands.rend()) {
+    while ( operands_it != expr.operands.end()) {
         if (!first) {
             os << *operators_it;
             ++operators_it;
@@ -67,12 +73,18 @@ std::ostream& operator << (std::ostream &os, const TExpression &expr) {
 
 // Вычисление выражения. Необходимо для тестирования
 int Evaluate(const TExpression &expr) {
-    auto operands_it = expr.operands.rbegin();
-    auto operators_it = expr.operators.rbegin();
-    int result = *operands_it;
-    ++operands_it;
-    while( operands_it != expr.operands.rend() ) {
-       switch( *operators_it) {
+    auto operands_it = expr.operands.begin();
+    auto operators_it = expr.operators.begin();
+    int result = 0;
+    bool first = true;
+    while( operands_it != expr.operands.end() ) {
+        if (first) {
+            result = *operands_it;
+            ++operands_it;
+            first = false;
+            continue;
+        }
+        switch( *operators_it) {
            case '+':
                result += *operands_it;
                break;
@@ -90,9 +102,10 @@ int Evaluate(const TExpression &expr) {
 // Простой юнит тест
 void TestSolve() {
     {
-        int expected = 200;
-        std::vector <int> nums = {9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
-        if ( Evaluate(Solve(nums, expected)) != expected ) {
+        int expected = 4;
+        std::vector <int> nums = {3, 2, 1, 0};
+        if ( Evaluate(Solve(nums, expected)[0]) != expected ) {
+            std::cerr << Solve(nums, expected).size() << '\n';
             std::cerr << "TestSolve failed!";
             std::exit(1);
         }
@@ -104,6 +117,8 @@ int main() {
     TestSolve();
     
     std::vector <int> nums = {9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
-    TExpression expr = Solve(nums);
-    std::cout << expr << std::endl;
+    std::vector <TExpression> exprs = Solve(nums, 200);
+    for (const auto &expr: exprs) {
+        std::cout << expr << std::endl;
+    }
 }
